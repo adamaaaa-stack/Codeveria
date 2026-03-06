@@ -6,6 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createMilestoneAction } from "@/app/workspace/actions";
 
+function getErrorMessage(value: unknown): string | null {
+  if (value && typeof value === "object" && "error" in value) {
+    const err = (value as { error: unknown }).error;
+    return err != null && err !== "" ? String(err) : null;
+  }
+  return null;
+}
+
 interface CreateMilestoneDialogProps {
   workspaceId: string;
   orderIndex: number;
@@ -33,11 +41,8 @@ export function CreateMilestoneDialog({
 
     const result = await createMilestoneAction(formData);
     setLoading(false);
-    const err: string | null =
-      result && typeof result === "object" && "error" in result
-        ? String((result as { error: unknown }).error)
-        : null;
-    if (err) {
+    const err = getErrorMessage(result);
+    if (err !== null) {
       setError(err);
       return;
     }
