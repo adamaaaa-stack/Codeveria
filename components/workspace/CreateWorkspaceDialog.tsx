@@ -33,11 +33,11 @@ export function CreateWorkspaceDialog({
 
     const result = await createWorkspaceAction(formData);
     setLoading(false);
-    if (result.error) {
+    if (result && "error" in result && typeof result.error === "string") {
       setError(result.error);
       return;
     }
-    if ("workspaceId" in result) {
+    if (result && "workspaceId" in result) {
       router.push(`/workspace/${result.workspaceId}`);
     }
   }
