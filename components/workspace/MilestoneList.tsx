@@ -42,21 +42,21 @@ export function MilestoneList({
   async function handleSendForConfirmation() {
     setActionError(null);
     const result = await sendForConfirmationAction(workspace.id);
-    if (result.error) setActionError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
     else window.location.reload();
   }
 
   async function handleStudentAccept() {
     setActionError(null);
     const result = await studentAcceptAction(workspace.id);
-    if (result.error) setActionError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
     else window.location.reload();
   }
 
   async function handleStudentRequestChanges() {
     setActionError(null);
     const result = await studentRequestChangesAction(workspace.id);
-    if (result.error) setActionError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
     else window.location.reload();
   }
 
@@ -64,7 +64,7 @@ export function MilestoneList({
     if (!confirm("Delete this milestone?")) return;
     setActionError(null);
     const result = await deleteMilestoneAction(milestoneId, workspace.id);
-    if (result.error) setActionError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
     else window.location.reload();
   }
 
@@ -215,7 +215,7 @@ function EditMilestoneInline({
     const { updateMilestoneAction } = await import("@/app/workspace/actions");
     const result = await updateMilestoneAction(formData);
     setLoading(false);
-    if (result.error) setError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setError(result.error);
     else onDone();
   }
 

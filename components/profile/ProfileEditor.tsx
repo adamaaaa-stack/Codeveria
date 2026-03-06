@@ -49,7 +49,7 @@ export function ProfileEditor({
     setBioSaving(true);
     const result = await updateProfileBio(bio);
     setBioSaving(false);
-    if (result.error) setBioError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setBioError(result.error);
   }
 
   function toggleSkill(skillId: string) {
@@ -66,7 +66,7 @@ export function ProfileEditor({
     setSkillsSaving(true);
     const result = await updateProfileSkills(Array.from(selectedSkills));
     setSkillsSaving(false);
-    if (result.error) setSkillsError(result.error);
+    if (result && "error" in result && typeof result.error === "string") setSkillsError(result.error);
   }
 
   async function handleAddPortfolio(e: React.FormEvent<HTMLFormElement>) {
@@ -74,7 +74,7 @@ export function ProfileEditor({
     const form = e.currentTarget;
     const fd = new FormData(form);
     const result = await addPortfolioItem(fd);
-    if (result.error) {
+    if (result && "error" in result && typeof result.error === "string") {
       alert(result.error);
       return;
     }
@@ -90,7 +90,7 @@ export function ProfileEditor({
     const form = e.currentTarget;
     const fd = new FormData(form);
     const result = await updatePortfolioItem(id, fd);
-    if (result.error) {
+    if (result && "error" in result && typeof result.error === "string") {
       alert(result.error);
       return;
     }
@@ -100,7 +100,7 @@ export function ProfileEditor({
   async function handleDeletePortfolio(id: string) {
     if (!confirm("Delete this portfolio item?")) return;
     const result = await deletePortfolioItem(id);
-    if (result.error) alert(result.error);
+    if (result && "error" in result && typeof result.error === "string") alert(result.error);
   }
 
   return (

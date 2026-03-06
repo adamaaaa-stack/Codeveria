@@ -45,11 +45,13 @@ export function StartConversationButton({
     setLoading(true);
     const result = await getOrCreateConversationAction(studentId);
     setLoading(false);
-    if ("error" in result) {
+    if (result && "error" in result && typeof result.error === "string") {
       setError(result.error);
       return;
     }
-    router.push(`/messages/${result.conversationId}`);
+    if (result && "conversationId" in result && typeof result.conversationId === "string") {
+      router.push(`/messages/${result.conversationId}`);
+    }
   }
 
   return (
