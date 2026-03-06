@@ -5,6 +5,7 @@
 
 import { chatCompletion } from "@/lib/openrouter/client";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 
 export interface GeneratedTaskPayload {
   title: string;
@@ -72,9 +73,10 @@ function parseGeneratedPayload(raw: string): GeneratedTaskPayload {
 
 /**
  * Get or create skill_level for (skillId, level). Returns skill_level id.
+ * Uses service role to bypass RLS (skill_levels has no insert policy for users).
  */
 async function getOrCreateSkillLevel(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  supabase: ReturnType<typeof createServiceRoleClient>,
   skillId: string,
   level: number
 ): Promise<string> {
@@ -159,9 +161,10 @@ export async function generateSkillTask(
     .filter(Boolean)
     .join("\n\n");
 
-  const skillLevelId = await getOrCreateSkillLevel(supabase, skillId, level);
+  const serviceSupabase = createServiceRoleClient();
+  const skillLevelId = await getOrCreateSkillLevel(serviceSupabase, skillId, level);
 
-  const { data: taskRow, error: insertError } = await supabase
+  const { data: taskRow, error: insertError } = await serviceSupabase
     .from("skill_tasks")
     .insert({
       skill_level_id: skillLevelId,

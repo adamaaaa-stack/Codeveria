@@ -17,6 +17,7 @@ export function TakeTestFlow({
 }: TakeTestFlowProps) {
   const [step, setStep] = useState<"pick" | "test">("pick");
   const [loading, setLoading] = useState(false);
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState<{
     id: string;
@@ -33,7 +34,9 @@ export function TakeTestFlow({
   const [level, setLevel] = useState(0);
 
   async function handleTakeTest(skillId: string, slug: string, nextLevel: number) {
+    if (loading) return;
     setError(null);
+    setGeneratingFor(skillId);
     setLoading(true);
     try {
       const res = await fetch("/api/tests/generate", {
@@ -53,6 +56,7 @@ export function TakeTestFlow({
       setError(e instanceof Error ? e.message : "Failed to generate");
     } finally {
       setLoading(false);
+      setGeneratingFor(null);
     }
   }
 
@@ -122,7 +126,7 @@ export function TakeTestFlow({
                   disabled={loading}
                   className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {loading ? "Generating…" : "Start"}
+                  {generatingFor === skill.id ? "Generating…" : "Start"}
                 </button>
               </div>
             </div>
