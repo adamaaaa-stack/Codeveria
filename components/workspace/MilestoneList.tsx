@@ -11,6 +11,8 @@ import {
   studentAcceptAction,
   studentRequestChangesAction,
   deleteMilestoneAction,
+  submitMilestoneAction,
+  approveMilestoneAction,
 } from "@/app/workspace/actions";
 import { CreateMilestoneDialog } from "./CreateMilestoneDialog";
 import { Pencil, Trash2, Plus } from "lucide-react";
@@ -64,6 +66,20 @@ export function MilestoneList({
     if (!confirm("Delete this milestone?")) return;
     setActionError(null);
     const result = await deleteMilestoneAction(milestoneId, workspace.id);
+    if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
+    else window.location.reload();
+  }
+
+  async function handleSubmit(milestoneId: string) {
+    setActionError(null);
+    const result = await submitMilestoneAction(milestoneId, workspace.id);
+    if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
+    else window.location.reload();
+  }
+
+  async function handleApprove(milestoneId: string) {
+    setActionError(null);
+    const result = await approveMilestoneAction(milestoneId, workspace.id);
     if (result && "error" in result && typeof result.error === "string") setActionError(result.error);
     else window.location.reload();
   }
@@ -140,26 +156,38 @@ export function MilestoneList({
                     {m.due_date && ` · Due ${m.due_date}`}
                   </p>
                 </div>
-                {isCompany && workspace.status === "draft" && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setEditingId(m.id)}
-                      title="Edit"
-                    >
-                      <Pencil className="h-4 w-4" />
+                <div className="flex gap-2">
+                  {isCompany && workspace.status === "draft" && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEditingId(m.id)}
+                        title="Edit"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(m.id)}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </>
+                  )}
+                  {!isCompany && workspace.status === "active" && m.status === "active" && (
+                    <Button size="sm" variant="outline" onClick={() => handleSubmit(m.id)}>
+                      Submit for approval
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(m.id)}
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                  )}
+                  {isCompany && workspace.status === "active" && m.status === "submitted" && (
+                    <Button size="sm" onClick={() => handleApprove(m.id)}>
+                      Approve & pay
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </li>
             ))}
           </ul>

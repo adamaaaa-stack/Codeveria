@@ -9,6 +9,8 @@ import {
   sendWorkspaceForConfirmation,
   studentAcceptWorkspace,
   studentRequestWorkspaceChanges,
+  submitMilestone,
+  approveMilestone,
 } from "@/lib/workspaces";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -155,6 +157,26 @@ export async function studentRequestChangesAction(workspaceId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
   const result = await studentRequestWorkspaceChanges(workspaceId, user.id);
+  if (result.error) return result;
+  revalidatePath(`/workspace/${workspaceId}`);
+  return {};
+}
+
+export async function submitMilestoneAction(milestoneId: string, workspaceId: string) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+  const result = await submitMilestone(milestoneId, workspaceId, user.id);
+  if (result.error) return result;
+  revalidatePath(`/workspace/${workspaceId}`);
+  return {};
+}
+
+export async function approveMilestoneAction(milestoneId: string, workspaceId: string) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+  const result = await approveMilestone(milestoneId, workspaceId, user.id);
   if (result.error) return result;
   revalidatePath(`/workspace/${workspaceId}`);
   return {};

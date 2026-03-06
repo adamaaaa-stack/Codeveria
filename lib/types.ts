@@ -221,7 +221,8 @@ export interface EscrowPaymentDb {
   workspace_id: string;
   company_id: string;
   student_id: string;
-  lemonsqueezy_order_id: string | null;
+  paypal_order_id: string | null;
+  paypal_capture_id: string | null;
   amount: number;
   currency: string;
   status: EscrowPaymentStatus;

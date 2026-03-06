@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Milestone, WorkspaceWithParticipants } from "@/lib/types";
@@ -22,26 +23,55 @@ function formatCents(cents: number): string {
 export function FundWorkspaceCard({ workspace, milestones }: FundWorkspaceCardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const paypalReturn = searchParams.get("paypal_return");
+    const token = searchParams.get("token");
+    if (paypalReturn === "1" && token && workspace.id && !capturing) {
+      setCapturing(true);
+      fetch("/api/payments/capture-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: token, workspace_id: workspace.id }),
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          return { ok: res.ok, data };
+        })
+        .then(({ ok, data }) => {
+          if (ok && data.success) {
+            window.history.replaceState({}, "", `/workspace/${workspace.id}`);
+            window.location.reload();
+          } else {
+            setError(data.error ?? "Failed to capture payment");
+          }
+        })
+        .catch(() => setError("Failed to capture payment"))
+        .finally(() => setCapturing(false));
+    }
+  }, [searchParams, workspace.id, capturing]);
 
   async function handleFund() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/lemonsqueezy/create-checkout", {
+      const res = await fetch("/api/payments/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspace_id: workspace.id }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to create checkout");
+        setError(data.error ?? "Failed to create order");
         return;
       }
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
+      if (data.approval_url) {
+        window.location.href = data.approval_url;
         return;
       }
-      setError("No checkout URL returned");
+      setError("No approval URL returned");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -51,6 +81,7 @@ export function FundWorkspaceCard({ workspace, milestones }: FundWorkspaceCardPr
 
   const totalCents = workspace.total_budget;
   const allocated = milestones.reduce((s, m) => s + m.amount, 0);
+  const isBusy = loading || capturing;
 
   return (
     <Card>
@@ -60,7 +91,7 @@ export function FundWorkspaceCard({ workspace, milestones }: FundWorkspaceCardPr
           Fund workspace
         </CardTitle>
         <CardDescription>
-          Pay the total budget via Lemon Squeezy. Funds are held in escrow until milestones are completed.
+          Pay the total budget with PayPal. Funds are held in escrow until milestones are completed.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -100,17 +131,17 @@ export function FundWorkspaceCard({ workspace, milestones }: FundWorkspaceCardPr
         <Button
           className="w-full gap-2"
           onClick={handleFund}
-          disabled={loading}
+          disabled={isBusy}
         >
-          {loading ? (
+          {isBusy ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Creating checkout…
+              {capturing ? "Completing payment…" : "Redirecting to PayPal…"}
             </>
           ) : (
             <>
               <CreditCard className="h-4 w-4" />
-              Fund workspace with Lemon Squeezy
+              Fund workspace with PayPal
             </>
           )}
         </Button>

@@ -1,7 +1,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/service";
 
 export type AccountOwnerType = "workspace" | "profile" | "external";
-export type AccountType = "escrow" | "external" | "wallet";
+export type AccountType = "escrow" | "external" | "wallet" | "paypal_payout";
 
 export interface Account {
   id: string;

@@ -1,5 +1,5 @@
 -- Financial ledger: accounts, ledger_transactions, escrow_payments
--- Used for Lemon Squeezy funding and escrow tracking.
+-- Used for PayPal funding and escrow tracking (see 007_paypal for PayPal fields).
 
 -- --------------------------------------------------
 -- accounts

@@ -1,4 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
+import { getOrCreateAccount, createLedgerTransaction } from "@/lib/ledger/client";
+import { sendPayout } from "@/lib/paypal/client";
 import type {
   Workspace,
   WorkspaceMessage,
@@ -284,4 +287,164 @@ export async function markWorkspaceMessagesRead(
     .eq("workspace_id", workspaceId)
     .neq("sender_id", currentUserId)
     .is("read_at", null);
+}
+
+/**
+ * Student submits a milestone for company approval.
+ */
+export async function submitMilestone(
+  milestoneId: string,
+  workspaceId: string,
+  studentUserId: string
+): Promise<{ error?: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: m } = await supabase
+    .from("milestones")
+    .select("id, workspace_id, student_id, status")
+    .eq("id", milestoneId)
+    .eq("workspace_id", workspaceId)
+    .single();
+  if (!m || m.student_id !== studentUserId) return { error: "Unauthorized" };
+  if (m.status !== "active") return { error: "Milestone is not active" };
+  const { error } = await supabase
+    .from("milestones")
+    .update({ status: "submitted", submitted_at: new Date().toISOString() })
+    .eq("id", milestoneId);
+  if (error) return { error: error.message };
+  return {};
+}
+
+/**
+ * Company approves a submitted milestone: releases escrow to student wallet and triggers PayPal payout.
+ * Requires: workspace funded, milestone status submitted, student has PayPal email, no duplicate payout.
+ */
+export async function approveMilestone(
+  milestoneId: string,
+  workspaceId: string,
+  companyUserId: string
+): Promise<{ error?: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || user.id !== companyUserId) return { error: "Unauthorized" };
+
+  const { data: milestone } = await supabase
+    .from("milestones")
+    .select("id, workspace_id, student_id, amount, status")
+    .eq("id", milestoneId)
+    .eq("workspace_id", workspaceId)
+    .single();
+  if (!milestone) return { error: "Milestone not found" };
+  if (milestone.status !== "submitted") return { error: "Milestone must be submitted to approve" };
+
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("id, company_id, student_id")
+    .eq("id", workspaceId)
+    .single();
+  if (!workspace || workspace.company_id !== user.id) return { error: "Forbidden" };
+
+  const serviceSupabase = createServiceRoleClient();
+
+  const { data: escrowPayment } = await serviceSupabase
+    .from("escrow_payments")
+    .select("id, status")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "funded")
+    .maybeSingle();
+  if (!escrowPayment) return { error: "Workspace escrow is not funded" };
+
+  const { data: existingPayout } = await serviceSupabase
+    .from("payout_transactions")
+    .select("id")
+    .eq("milestone_id", milestoneId)
+    .maybeSingle();
+  if (existingPayout) return { error: "Payout already sent for this milestone" };
+
+  const currency = "usd";
+  const escrowAccount = await getOrCreateAccount({
+    owner_type: "workspace",
+    owner_id: workspaceId,
+    account_type: "escrow",
+    currency,
+    supabase: serviceSupabase,
+  });
+  const studentWallet = await getOrCreateAccount({
+    owner_type: "profile",
+    owner_id: milestone.student_id,
+    account_type: "wallet",
+    currency,
+    supabase: serviceSupabase,
+  });
+  if (!escrowAccount || !studentWallet) return { error: "Failed to get ledger accounts" };
+
+  const releaseTx = await createLedgerTransaction({
+    type: "milestone_release",
+    amount: milestone.amount,
+    currency,
+    source_account_id: escrowAccount.id,
+    destination_account_id: studentWallet.id,
+    reference_type: "milestone",
+    reference_id: milestoneId,
+    supabase: serviceSupabase,
+  });
+  if (!releaseTx) return { error: "Failed to create ledger release" };
+
+  await supabase
+    .from("milestones")
+    .update({
+      status: "approved",
+      approved_at: new Date().toISOString(),
+    })
+    .eq("id", milestoneId);
+
+  const { data: payoutAccount } = await serviceSupabase
+    .from("payout_accounts")
+    .select("paypal_email")
+    .eq("profile_id", milestone.student_id)
+    .maybeSingle();
+  if (!payoutAccount?.paypal_email) return {}; // no PayPal email: milestone approved, no payout
+
+  const result = await sendPayout(
+    (payoutAccount as { paypal_email: string }).paypal_email,
+    milestone.amount,
+    "USD"
+  );
+  const payoutBatchId = result && "payoutBatchId" in result ? result.payoutBatchId : null;
+  const payoutError = result && "error" in result ? result.error : null;
+
+  await serviceSupabase.from("payout_transactions").insert({
+    profile_id: milestone.student_id,
+    milestone_id: milestoneId,
+    amount: milestone.amount,
+    paypal_payout_batch_id: payoutBatchId ?? null,
+    status: payoutError ? "failed" : "paid",
+    paid_at: payoutError ? null : new Date().toISOString(),
+  });
+
+  if (payoutError) {
+    console.error("[approveMilestone] PayPal payout failed:", payoutError);
+    return {}; // milestone already approved and ledger released
+  }
+
+  const paypalPayoutAccount = await getOrCreateAccount({
+    owner_type: "external",
+    owner_id: null,
+    account_type: "paypal_payout",
+    currency,
+    supabase: serviceSupabase,
+  });
+  if (paypalPayoutAccount) {
+    await createLedgerTransaction({
+      type: "payout",
+      amount: milestone.amount,
+      currency,
+      source_account_id: studentWallet.id,
+      destination_account_id: paypalPayoutAccount.id,
+      reference_type: "milestone",
+      reference_id: milestoneId,
+      supabase: serviceSupabase,
+    });
+  }
+
+  return {};
 }

@@ -10,6 +10,7 @@ import {
   addPortfolioItem,
   updatePortfolioItem,
   deletePortfolioItem,
+  updatePayoutAccount,
 } from "@/app/profile/actions";
 import type { DbProfile } from "@/lib/auth";
 import type { Skill } from "@/lib/types";
@@ -21,6 +22,7 @@ interface ProfileEditorProps {
   skills: Skill[];
   selectedSkillIds: string[];
   portfolioItems: PortfolioItemDb[];
+  payoutAccount: { paypal_email: string } | null;
 }
 
 export function ProfileEditor({
@@ -28,6 +30,7 @@ export function ProfileEditor({
   skills,
   selectedSkillIds,
   portfolioItems,
+  payoutAccount,
 }: ProfileEditorProps) {
   const [bio, setBio] = useState(profile.bio ?? "");
   const [bioSaving, setBioSaving] = useState(false);
@@ -41,6 +44,10 @@ export function ProfileEditor({
 
   const [portfolioFormOpen, setPortfolioFormOpen] = useState(false);
   const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(null);
+
+  const [paypalEmail, setPaypalEmail] = useState(payoutAccount?.paypal_email ?? "");
+  const [paypalSaving, setPaypalSaving] = useState(false);
+  const [paypalError, setPaypalError] = useState<string | null>(null);
 
   const isStudent = profile.role === "student";
 
@@ -103,6 +110,15 @@ export function ProfileEditor({
     if (result && "error" in result && typeof result.error === "string") alert(result.error);
   }
 
+  async function handleSavePaypalEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setPaypalError(null);
+    setPaypalSaving(true);
+    const result = await updatePayoutAccount(paypalEmail);
+    setPaypalSaving(false);
+    if (result && "error" in result && typeof result.error === "string") setPaypalError(result.error);
+  }
+
   return (
     <div className="space-y-6">
       {/* Basic info (all roles) */}
@@ -148,6 +164,33 @@ export function ProfileEditor({
               >
                 {bioSaving ? "Saving…" : "Save bio"}
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* PayPal payout email */}
+          <Card>
+            <CardHeader>
+              <CardTitle>PayPal email</CardTitle>
+              <CardDescription>
+                Add your PayPal email to receive payouts when milestones are approved.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSavePaypalEmail} className="space-y-3">
+                {paypalError && (
+                  <p className="text-sm text-destructive">{paypalError}</p>
+                )}
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={paypalEmail}
+                  onChange={(e) => setPaypalEmail(e.target.value)}
+                  className="max-w-sm"
+                />
+                <Button type="submit" size="sm" disabled={paypalSaving}>
+                  {paypalSaving ? "Saving…" : "Save PayPal email"}
+                </Button>
+              </form>
             </CardContent>
           </Card>
 

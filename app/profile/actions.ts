@@ -129,3 +129,22 @@ export async function deletePortfolioItem(id: string) {
   revalidatePath("/developers");
   return {};
 }
+
+export async function updatePayoutAccount(paypalEmail: string) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const email = paypalEmail.trim().toLowerCase();
+  if (!email) return { error: "PayPal email is required" };
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return { error: "Enter a valid email address" };
+
+  const { error } = await supabase.from("payout_accounts").upsert(
+    { profile_id: user.id, paypal_email: email },
+    { onConflict: "profile_id" }
+  );
+  if (error) return { error: error.message };
+  revalidatePath("/profile");
+  return {};
+}

@@ -9,7 +9,7 @@ export default async function ProfilePage() {
   const { profile } = await requireCompletedOnboarding();
   const supabase = await createServerSupabaseClient();
 
-  const [skills, profileSkillsRows, portfolioRows] = await Promise.all([
+  const [skills, profileSkillsRows, portfolioRows, payoutAccountRow] = await Promise.all([
     getSkills(),
     supabase
       .from("profile_skills")
@@ -20,10 +20,18 @@ export default async function ProfilePage() {
       .select("*")
       .eq("profile_id", profile.id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("payout_accounts")
+      .select("paypal_email")
+      .eq("profile_id", profile.id)
+      .maybeSingle(),
   ]);
 
   const skillIds = (profileSkillsRows.data ?? []).map((r) => r.skill_id);
   const portfolioItems = (portfolioRows.data ?? []) as PortfolioItemDb[];
+  const payoutAccount = payoutAccountRow.data
+    ? { paypal_email: (payoutAccountRow.data as { paypal_email: string }).paypal_email }
+    : null;
 
   return (
     <div className="space-y-6">
@@ -38,6 +46,7 @@ export default async function ProfilePage() {
         skills={skills as Skill[]}
         selectedSkillIds={skillIds}
         portfolioItems={portfolioItems}
+        payoutAccount={payoutAccount}
       />
     </div>
   );

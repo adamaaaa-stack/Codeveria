@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createCheckout } from "@/lib/lemonsqueezy/client";
+import { createOrder } from "@/lib/paypal/client";
 
 export async function POST(request: Request) {
   try {
@@ -46,11 +46,9 @@ export async function POST(request: Request) {
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ??
       (typeof request.url === "string" ? new URL(request.url).origin : "");
-    const result = await createCheckout({
-      workspaceId,
-      workspaceTitle: workspace.title ?? "Workspace",
-      amountCents,
-      successRedirectUrl: `${baseUrl}/workspace/${workspaceId}`,
+    const result = await createOrder(amountCents, "USD", {
+      returnUrl: `${baseUrl}/workspace/${workspaceId}?paypal_return=1`,
+      cancelUrl: `${baseUrl}/workspace/${workspaceId}`,
     });
 
     if ("error" in result) {
@@ -58,10 +56,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      checkout_url: result.checkoutUrl,
+      order_id: result.orderId,
+      approval_url: result.approvalUrl,
     });
   } catch (e) {
-    console.error("[create-checkout]", e);
+    console.error("[payments create-order]", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Server error" },
       { status: 500 }
