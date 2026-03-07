@@ -1,6 +1,6 @@
 /**
- * Code escrow: submission CRUD, review, payment stub, and code release.
- * Payment is stubbed; architected for a real provider later.
+ * Code escrow: submission CRUD, review, and code release.
+ * Payments are handled externally; code unlocks when both company and developer confirm payment.
  */
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -96,8 +96,9 @@ export async function reviewSubmission(
     await service.from("escrow_records").upsert(
       {
         submission_id: input.submission_id,
-        payment_status: "pending",
         code_access_granted: false,
+        company_payment_confirmed: false,
+        developer_payment_confirmed: false,
       },
       { onConflict: "submission_id" }
     );
@@ -109,7 +110,8 @@ export async function reviewSubmission(
 }
 
 /**
- * Release code: require escrow paid, set code_access_granted and released_at, set submission to 'delivered'.
+ * Release code: set code_access_granted when both company and developer have confirmed payment.
+ * Called after either confirmation; unlocks only when both flags are true.
  */
 export async function releaseCode(
   submissionId: string
@@ -118,16 +120,16 @@ export async function releaseCode(
 
   const { data: escrow } = await service
     .from("escrow_records")
-    .select("id, payment_status, code_access_granted")
+    .select("id, company_payment_confirmed, developer_payment_confirmed, code_access_granted")
     .eq("submission_id", submissionId)
     .single();
 
   if (!escrow) return { error: "Escrow record not found" };
-  if (escrow.payment_status !== "paid") {
-    return { error: "Code can only be released after payment is completed" };
-  }
   if (escrow.code_access_granted) {
     return { released: true };
+  }
+  if (!escrow.company_payment_confirmed || !escrow.developer_payment_confirmed) {
+    return { error: "Both parties must confirm payment before code is released" };
   }
 
   const now = new Date().toISOString();
@@ -142,7 +144,6 @@ export async function releaseCode(
     .update({
       code_access_granted: true,
       released_at: now,
-      payment_status: "released",
     })
     .eq("submission_id", submissionId);
 
@@ -194,7 +195,7 @@ export async function getDownloadUrl(
     .single();
 
   if (!escrow || !escrow.code_access_granted) {
-    return { error: "Code locked until payment is completed" };
+    return { error: "Code locked until both parties confirm payment." };
   }
 
   const { data: signed } = await service.storage
@@ -221,7 +222,11 @@ export async function getSubmissionsForWorkspace(
     preview_status?: string | null;
     preview_deployment_id?: string | null;
     preview_error?: string | null;
-    escrow?: { payment_status: string; code_access_granted: boolean } | null;
+    escrow?: {
+      code_access_granted: boolean;
+      company_payment_confirmed: boolean;
+      developer_payment_confirmed: boolean;
+    } | null;
   }>
 > {
   const supabase = await createServerSupabaseClient();
@@ -244,13 +249,13 @@ export async function getSubmissionsForWorkspace(
   const submissionIds = rows.map((r) => r.id);
   const { data: escrows } = await supabase
     .from("escrow_records")
-    .select("submission_id, payment_status, code_access_granted")
+    .select("submission_id, code_access_granted, company_payment_confirmed, developer_payment_confirmed")
     .in("submission_id", submissionIds);
 
   const escrowBySub = new Map(
-    (escrows ?? []).map((e: { submission_id: string; payment_status: string; code_access_granted: boolean }) => [
+    (escrows ?? []).map((e: { submission_id: string; code_access_granted: boolean; company_payment_confirmed: boolean; developer_payment_confirmed: boolean }) => [
       e.submission_id,
-      { payment_status: e.payment_status, code_access_granted: e.code_access_granted },
+      { code_access_granted: e.code_access_granted, company_payment_confirmed: e.company_payment_confirmed, developer_payment_confirmed: e.developer_payment_confirmed },
     ])
   );
 
@@ -267,6 +272,74 @@ export async function getSubmissionsForWorkspace(
     preview_error: (r as { preview_error?: string }).preview_error ?? null,
     escrow: escrowBySub.get(r.id) ?? null,
   }));
+}
+
+/** Company confirms they have sent payment. Sets company_payment_confirmed; unlocks code if developer already confirmed. */
+export async function confirmPaymentCompany(
+  submissionId: string,
+  userId: string
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || user.id !== userId) return { error: "Unauthorized" };
+
+  const { data: sub } = await supabase
+    .from("submissions")
+    .select("id, workspace_id")
+    .eq("id", submissionId)
+    .single();
+  if (!sub) return { error: "Submission not found" };
+
+  const { data: w } = await supabase
+    .from("workspaces")
+    .select("company_id")
+    .eq("id", sub.workspace_id)
+    .single();
+  if (!w || w.company_id !== user.id) return { error: "Only the company can confirm payment sent" };
+
+  const service = createServiceRoleClient();
+  const { error: updateError } = await service
+    .from("escrow_records")
+    .update({ company_payment_confirmed: true })
+    .eq("submission_id", submissionId);
+  if (updateError) return { error: updateError.message };
+
+  const releaseResult = await releaseCode(submissionId);
+  if (releaseResult && "error" in releaseResult && releaseResult.error !== "Both parties must confirm payment before code is released") {
+    return { error: releaseResult.error };
+  }
+  return { ok: true };
+}
+
+/** Developer confirms they have received payment. Sets developer_payment_confirmed; unlocks code if company already confirmed. */
+export async function confirmPaymentDeveloper(
+  submissionId: string,
+  userId: string
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || user.id !== userId) return { error: "Unauthorized" };
+
+  const { data: sub } = await supabase
+    .from("submissions")
+    .select("id, developer_id")
+    .eq("id", submissionId)
+    .single();
+  if (!sub) return { error: "Submission not found" };
+  if (sub.developer_id !== user.id) return { error: "Only the developer can confirm payment received" };
+
+  const service = createServiceRoleClient();
+  const { error: updateError } = await service
+    .from("escrow_records")
+    .update({ developer_payment_confirmed: true })
+    .eq("submission_id", submissionId);
+  if (updateError) return { error: updateError.message };
+
+  const releaseResult = await releaseCode(submissionId);
+  if (releaseResult && "error" in releaseResult && releaseResult.error !== "Both parties must confirm payment before code is released") {
+    return { error: releaseResult.error };
+  }
+  return { ok: true };
 }
 
 /** Update submission with code_storage_path after upload. */

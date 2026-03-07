@@ -238,8 +238,6 @@ export type SubmissionStatus =
 
 export type PreviewStatus = "not_started" | "building" | "ready" | "failed";
 
-export type EscrowPaymentStatus = "pending" | "paid" | "released";
-
 export interface SubmissionDb {
   id: string;
   workspace_id: string;
@@ -255,21 +253,6 @@ export interface SubmissionDb {
   preview_error?: string | null;
 }
 
-export interface SubmissionPaymentDb {
-  id: string;
-  submission_id: string;
-  workspace_id: string;
-  company_id: string;
-  developer_id: string;
-  lemonsqueezy_checkout_id: string | null;
-  lemonsqueezy_order_id: string | null;
-  amount_cents: number | null;
-  currency: string;
-  status: "pending" | "paid" | "failed" | "refunded";
-  created_at: string;
-  paid_at: string | null;
-}
-
 export interface SubmissionReviewDb {
   id: string;
   submission_id: string;
@@ -282,8 +265,9 @@ export interface SubmissionReviewDb {
 export interface EscrowRecordDb {
   id: string;
   submission_id: string;
-  payment_status: EscrowPaymentStatus;
   code_access_granted: boolean;
+  company_payment_confirmed: boolean;
+  developer_payment_confirmed: boolean;
   released_at: string | null;
   created_at: string;
 }

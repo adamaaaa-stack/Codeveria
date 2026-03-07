@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ExternalLink, Upload, Loader2 } from "lucide-react";
+import { ExternalLink, Upload, Loader2, CheckCircle } from "lucide-react";
 import { PreviewStatusBadge } from "@/components/workspace/PreviewStatusBadge";
 
 export interface SubmissionItem {
@@ -17,6 +17,11 @@ export interface SubmissionItem {
   created_at: string;
   preview_status?: string | null;
   preview_error?: string | null;
+  escrow?: {
+    code_access_granted: boolean;
+    company_payment_confirmed: boolean;
+    developer_payment_confirmed: boolean;
+  } | null;
 }
 
 interface SubmitSolutionCardProps {
@@ -35,7 +40,27 @@ export function SubmitSolutionCard({
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [buildPreviewId, setBuildPreviewId] = useState<string | null>(null);
+  const [confirmReceivedLoadingId, setConfirmReceivedLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirmPaymentReceived(submissionId: string) {
+    setError(null);
+    setConfirmReceivedLoadingId(submissionId);
+    try {
+      const res = await fetch("/api/submissions/confirm-payment-developer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: submissionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Confirmation failed");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setConfirmReceivedLoadingId(null);
+    }
+  }
 
   async function handleBuildPreview(submissionId: string) {
     setError(null);
@@ -110,7 +135,7 @@ export function SubmitSolutionCard({
       <CardHeader>
         <CardTitle>Submit solution</CardTitle>
         <CardDescription>
-          Upload your code and share a preview URL so the company can test before payment. Source code is locked until payment.
+          Upload your code and share a preview URL so the company can test. Payments are handled directly between you and the company. Both parties must confirm payment before the code is released.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -195,6 +220,35 @@ export function SubmitSolutionCard({
                     {!s.repo_url &&
                       (s.status === "submitted" || s.status === "preview_failed") && (
                       <span className="text-muted-foreground">Add repo URL to build preview</span>
+                    )}
+                    {(s.status === "approved" || s.status === "payment_required") && (
+                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-xs space-y-1">
+                        {s.escrow?.company_payment_confirmed && (
+                          <p className="text-muted-foreground flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" /> Company confirmed payment sent
+                          </p>
+                        )}
+                        {s.escrow?.developer_payment_confirmed ? (
+                          <p className="text-muted-foreground flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" /> You confirmed payment received
+                          </p>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={confirmReceivedLoadingId === s.id}
+                            onClick={() => handleConfirmPaymentReceived(s.id)}
+                          >
+                            {confirmReceivedLoadingId === s.id ? "Saving…" : "Confirm Payment Received"}
+                          </Button>
+                        )}
+                        {s.escrow?.code_access_granted && (
+                          <p className="text-green-600 dark:text-green-400 font-medium">
+                            Payment confirmed by both parties. Code is now available to the company.
+                          </p>
+                        )}
+                      </div>
                     )}
                     {s.preview_url && (
                       <a

@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Download } from "lucide-react";
+import { ExternalLink, Download, CheckCircle } from "lucide-react";
 import { PreviewStatusBadge } from "@/components/workspace/PreviewStatusBadge";
-import { UnlockCodeButton } from "@/components/workspace/UnlockCodeButton";
 
 export interface SubmissionReviewItem {
   id: string;
@@ -18,7 +17,11 @@ export interface SubmissionReviewItem {
   created_at: string;
   preview_status?: string | null;
   preview_error?: string | null;
-  escrow?: { payment_status: string; code_access_granted: boolean } | null;
+  escrow?: {
+    code_access_granted: boolean;
+    company_payment_confirmed: boolean;
+    developer_payment_confirmed: boolean;
+  } | null;
 }
 
 interface SubmissionReviewCardProps {
@@ -31,8 +34,28 @@ export function SubmissionReviewCard({
 }: SubmissionReviewCardProps) {
   const router = useRouter();
   const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
+  const [confirmSentLoadingId, setConfirmSentLoadingId] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirmPaymentSent(submissionId: string) {
+    setError(null);
+    setConfirmSentLoadingId(submissionId);
+    try {
+      const res = await fetch("/api/submissions/confirm-payment-company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: submissionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Confirmation failed");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setConfirmSentLoadingId(null);
+    }
+  }
 
   async function handleReview(submissionId: string, approved: boolean) {
     setError(null);
@@ -90,7 +113,7 @@ export function SubmissionReviewCard({
       <CardHeader>
         <CardTitle>Submission review</CardTitle>
         <CardDescription>
-          Test the preview, then approve or request changes. Source code unlocks only after payment.
+          Test the preview, then approve or request changes. Payments are handled directly between the company and developer. Both parties must confirm payment before the code is released.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -169,22 +192,45 @@ export function SubmissionReviewCard({
                 )}
 
                 {(s.status === "approved" || s.status === "payment_required") && (
-                  <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                    <p className="font-medium">Payment required to unlock source code.</p>
-                    <UnlockCodeButton submissionId={s.id} />
+                  <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm space-y-2">
+                    <p className="font-medium">Pay the developer externally, then confirm below.</p>
+                    {s.escrow?.company_payment_confirmed && (
+                      <p className="text-muted-foreground text-xs flex items-center gap-1">
+                        <CheckCircle className="h-3.5 w-3.5" /> You confirmed payment sent
+                      </p>
+                    )}
+                    {s.escrow?.developer_payment_confirmed && (
+                      <p className="text-muted-foreground text-xs flex items-center gap-1">
+                        <CheckCircle className="h-3.5 w-3.5" /> Developer confirmed payment received
+                      </p>
+                    )}
+                    {!s.escrow?.company_payment_confirmed && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleConfirmPaymentSent(s.id)}
+                        disabled={confirmSentLoadingId === s.id}
+                      >
+                        {confirmSentLoadingId === s.id ? "Saving…" : "Confirm Payment Sent"}
+                      </Button>
+                    )}
                   </div>
                 )}
 
                 {(s.status === "delivered" || s.escrow?.code_access_granted) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => handleDownload(s.id)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download source code
-                  </Button>
+                  <>
+                    <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                      Payment confirmed by both parties. Code is now available.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => handleDownload(s.id)}
+                    >
+                      <Download className="h-4 w-4" />
+                      Download source code
+                    </Button>
+                  </>
                 )}
               </li>
             ))}
