@@ -10,46 +10,46 @@ import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 interface WorkspaceCTAProps {
   conversationId: string;
   studentId: string;
-  workspace: Workspace | null;
+  workspaces: Workspace[];
   currentUserRole: "company" | "student";
 }
 
 export function WorkspaceCTA({
   conversationId,
   studentId,
-  workspace,
+  workspaces,
   currentUserRole,
 }: WorkspaceCTAProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const latestWorkspace = workspaces.length > 0 ? workspaces[0] : null;
 
-  if (workspace) {
-    return (
-      <Button size="sm" variant="outline" className="gap-2" asChild>
-        <Link href={`/workspace/${workspace.id}`}>
-          <Briefcase className="h-4 w-4" />
-          Open workspace
-        </Link>
-      </Button>
-    );
-  }
+  if (currentUserRole !== "company" && !latestWorkspace) return null;
 
-  if (currentUserRole === "company") {
-    return (
-      <>
-        <Button size="sm" className="gap-2" onClick={() => setShowCreateDialog(true)}>
-          <Briefcase className="h-4 w-4" />
-          Create workspace
+  return (
+    <div className="flex items-center gap-2">
+      {latestWorkspace && (
+        <Button size="sm" variant="outline" className="gap-2" asChild>
+          <Link href={`/workspace/${latestWorkspace.id}`}>
+            <Briefcase className="h-4 w-4" />
+            Open workspace
+          </Link>
         </Button>
-        {showCreateDialog && (
-          <CreateWorkspaceDialog
-            conversationId={conversationId}
-            studentId={studentId}
-            onCancel={() => setShowCreateDialog(false)}
-          />
-        )}
-      </>
-    );
-  }
-
-  return null;
+      )}
+      {currentUserRole === "company" && (
+        <>
+          <Button size="sm" className="gap-2" onClick={() => setShowCreateDialog(true)}>
+            <Briefcase className="h-4 w-4" />
+            Create workspace
+          </Button>
+          {showCreateDialog && (
+            <CreateWorkspaceDialog
+              conversationId={conversationId}
+              studentId={studentId}
+              onCancel={() => setShowCreateDialog(false)}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
 }

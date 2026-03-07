@@ -11,7 +11,7 @@ interface ConversationHeaderProps {
   otherParticipant: ParticipantSummary;
   conversationId: string;
   studentId: string;
-  workspace: Workspace | null;
+  workspaces: Workspace[];
   currentUserRole: "company" | "student";
 }
 
@@ -19,7 +19,7 @@ export function ConversationHeader({
   otherParticipant,
   conversationId,
   studentId,
-  workspace,
+  workspaces,
   currentUserRole,
 }: ConversationHeaderProps) {
   const name = otherParticipant.display_name ?? "Unknown";
@@ -56,7 +56,7 @@ export function ConversationHeader({
         <WorkspaceCTA
           conversationId={conversationId}
           studentId={studentId}
-          workspace={workspace}
+          workspaces={workspaces}
           currentUserRole={currentUserRole}
         />
       </div>

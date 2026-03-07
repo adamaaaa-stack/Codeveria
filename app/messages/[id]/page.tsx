@@ -5,7 +5,7 @@ import {
   getConversationMessages,
   markConversationRead,
 } from "@/lib/messaging";
-import { getWorkspaceForConversation } from "@/lib/workspaces";
+import { getWorkspacesForConversation } from "@/lib/workspaces";
 import { ChatWindow } from "@/components/messaging/ChatWindow";
 import { MessageComposer } from "@/components/messaging/MessageComposer";
 import { ConversationHeader } from "@/components/messaging/ConversationHeader";
@@ -18,10 +18,10 @@ export default async function ConversationPage({
   const user = await requireUser();
   const conversationId = params.id;
 
-  const [conversation, messages, workspace] = await Promise.all([
+  const [conversation, messages, workspaces] = await Promise.all([
     getConversationById(conversationId, user.id),
     getConversationMessages(conversationId, user.id),
-    getWorkspaceForConversation(conversationId, user.id),
+    getWorkspacesForConversation(conversationId, user.id),
   ]);
 
   if (!conversation) {
@@ -42,7 +42,7 @@ export default async function ConversationPage({
         otherParticipant={conversation.otherParticipant}
         conversationId={conversationId}
         studentId={studentId}
-        workspace={workspace}
+        workspaces={workspaces}
         currentUserRole={currentUserRole}
       />
 

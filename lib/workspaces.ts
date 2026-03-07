@@ -82,13 +82,6 @@ export async function createWorkspaceFromConversation(
   if (!conv || conv.company_id !== input.company_id || conv.student_id !== input.student_id)
     return { error: "Invalid conversation" };
 
-  const { data: existing } = await supabase
-    .from("workspaces")
-    .select("id")
-    .eq("conversation_id", input.conversation_id)
-    .single();
-  if (existing) return { error: "Workspace already exists for this conversation" };
-
   const { data: inserted, error } = await supabase
     .from("workspaces")
     .insert({
@@ -110,19 +103,30 @@ export async function createWorkspaceFromConversation(
   return { workspace: inserted as Workspace };
 }
 
+/** Get the most recent workspace for a conversation (for backward compatibility). */
 export async function getWorkspaceForConversation(
   conversationId: string,
   userId: string
 ): Promise<Workspace | null> {
+  const workspaces = await getWorkspacesForConversation(conversationId, userId);
+  return workspaces.length > 0 ? workspaces[0] : null;
+}
+
+/** Get all workspaces for a conversation (newest first). Enables multiple projects with the same person. */
+export async function getWorkspacesForConversation(
+  conversationId: string,
+  userId: string
+): Promise<Workspace[]> {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("workspaces")
     .select("*")
     .eq("conversation_id", conversationId)
-    .single();
-  if (error || !data) return null;
-  if (data.company_id !== userId && data.student_id !== userId) return null;
-  return data as Workspace;
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data.filter(
+    (w) => w.company_id === userId || w.student_id === userId
+  ) as Workspace[];
 }
 
 export async function sendWorkspaceForConfirmation(
